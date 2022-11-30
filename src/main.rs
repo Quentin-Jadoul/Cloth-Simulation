@@ -1,9 +1,8 @@
 use wgpu_bootstrap::{
     window::Window,
     frame::Frame,
-    cgmath::{ self, prelude::* },
+    cgmath::{ self},
     application::Application,
-    texture::create_texture_bind_group,
     context::Context,
     camera::Camera,
     default::{ Vertex, Particle },
