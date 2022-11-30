@@ -11,6 +11,8 @@ use wgpu_bootstrap::{
     geometry::icosahedron,
 };
 
+//test
+
 const NUM_PARTICLES_PER_ROW: u32 = 3;
 const PARTICLE_DISPLACEMENT: cgmath::Vector3<f32> = cgmath::Vector3::new(NUM_PARTICLES_PER_ROW as f32 * 0.5, 0.0, NUM_PARTICLES_PER_ROW as f32 * 0.5);
 
