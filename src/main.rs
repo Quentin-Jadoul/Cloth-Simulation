@@ -1,7 +1,7 @@
 use wgpu_bootstrap::{
     window::Window,
     frame::Frame,
-    cgmath::{ self},
+    cgmath::{ self, InnerSpace},
     application::Application,
     context::Context,
     camera::Camera,
@@ -40,6 +40,18 @@ const INDICES: &[u16] = &[
     5,6,
     6,7,
     7,4,
+];
+
+//create a constant containning the faces of the cube
+//each face is determined by the equation: ax + by + cz + d = 0
+//where a, b, c, d are the coefficients of the plane
+const FACES: &[cgmath::Vector4<f32>] = &[
+    cgmath::Vector4::new(0.0, 0.0, -1.0, CUBE_SIZE), //front
+    cgmath::Vector4::new(0.0, 0.0, 1.0, CUBE_SIZE), //back
+    cgmath::Vector4::new(0.0, -1.0, 0.0, CUBE_SIZE), //bottom
+    cgmath::Vector4::new(0.0, 1.0, 0.0, CUBE_SIZE), //top
+    cgmath::Vector4::new(-1.0, 0.0, 0.0, CUBE_SIZE), //left
+    cgmath::Vector4::new(1.0, 0.0, 0.0, CUBE_SIZE), //right
 ];
 struct MyApp {
     
@@ -104,7 +116,8 @@ impl MyApp {
             let x = index % NUM_PARTICLES_PER_ROW;
             let z = index / NUM_PARTICLES_PER_ROW;
             let position = cgmath::Vector3 { x: (x as f32) * 3 as f32, y: 0.0, z: (z as f32) * 3 as f32 } - PARTICLE_DISPLACEMENT * 3 as f32;
-            let velocity = cgmath::Vector3 { x: 1.0, y: 1.0, z: 1.0 };
+            
+            let velocity = cgmath::Vector3 { x: 3.0, y: 3.0, z: 3.0 };
 
             Particle {
                 position: position.into(), velocity: velocity.into(),
@@ -165,7 +178,27 @@ impl Application for MyApp {
             particle.position[0] += particle.velocity[0] * delta_time;
             particle.position[1] += particle.velocity[1] * delta_time;
             particle.position[2] += particle.velocity[2] * delta_time;
+
+            //add gravity to the particle
+            particle.velocity[1] -= 9.81 * delta_time;
+
+            //check if the particle hits the FACES of the cube
+            for face in FACES.iter() {
+                let normal = cgmath::Vector3::new(face[0], face[1], face[2]);
+                let distance = cgmath::dot(normal, cgmath::Vector3::new(particle.position[0], particle.position[1], particle.position[2])) + face[3];
+                if distance < 0.0 {
+                    let d = cgmath::dot(normal, cgmath::Vector3::new(particle.velocity[0], particle.velocity[1], particle.velocity[2]));
+                    // particle.velocity[0] -= d * normal.x;
+                    // particle.velocity[1] -= d * normal.y;
+                    // particle.velocity[2] -= d * normal.z;
+                    particle.velocity[0] = -0.8*particle.velocity[0];
+                    particle.velocity[1] = -0.8*particle.velocity[1];
+                    particle.velocity[2] = -0.8*particle.velocity[2];
+                }
+            }
         }
+
+
 
         let particle_data = self.particles.clone();
         context.update_buffer(&self.particle_buffer, particle_data.as_slice());
