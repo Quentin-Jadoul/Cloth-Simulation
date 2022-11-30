@@ -64,8 +64,8 @@ impl MyApp {
         let particles = (0..NUM_PARTICLES_PER_ROW*NUM_PARTICLES_PER_ROW).map(|index| {
             let x = index % NUM_PARTICLES_PER_ROW;
             let z = index / NUM_PARTICLES_PER_ROW;
-            let position = cgmath::Vector3 { x: x as f32, y: 0.0, z: z as f32 } - PARTICLE_DISPLACEMENT;
-            let velocity = cgmath::Vector3 { x: 0.0, y: 0.0, z: 0.0 };
+            let position = cgmath::Vector3 { x: (x as f32) * 3 as f32, y: 0.0, z: (z as f32) * 3 as f32 } - PARTICLE_DISPLACEMENT * 3 as f32;
+            let velocity = cgmath::Vector3 { x: 1.0, y: 1.0, z: 1.0 };
 
             Particle {
                 position: position.into(), velocity: velocity.into(),
@@ -110,20 +110,15 @@ impl Application for MyApp {
     }
 
     fn update(&mut self, context: &Context, delta_time: f32) {
-        // for particle in self.particles.iter_mut() {
-        //     let rotation = if particle.position.is_zero() {
-        //         // this is needed so an object at (0, 0, 0) won't get scaled to zero
-        //         // as Quaternions can effect scale if they're not created correctly
-        //         cgmath::Quaternion::from_axis_angle(cgmath::Vector3::unit_z(), cgmath::Deg(0.0))
-        //     } else {
-        //         cgmath::Quaternion::from_axis_angle(particle.position.normalize(), cgmath::Deg(45.0*delta_time))
-        //     };
-            
-        //     particle.velocity = velocity * particle.velocity;
-        // }
+        for particle in self.particles.iter_mut() {
+            //update the position of the particle
+            particle.position[0] += particle.velocity[0] * delta_time;
+            particle.position[1] += particle.velocity[1] * delta_time;
+            particle.position[2] += particle.velocity[2] * delta_time;
+        }
 
-        // let instance_data = self.instances.iter().map(Instance::to_raw).collect::<Vec<_>>();
-        // context.update_buffer(&self.instance_buffer, instance_data.as_slice());
+        let particle_data = self.particles.clone();
+        context.update_buffer(&self.particle_buffer, particle_data.as_slice());
     }
 }
 
