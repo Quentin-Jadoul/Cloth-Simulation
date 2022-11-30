@@ -1571,8 +1571,8 @@ dependencies = [
 
 [[package]]
 name = "wgpu-bootstrap"
-version = "0.1.19"
-source = "git+https://github.com/qlurkin/wgpu-bootstrap?tag=v0.1.19#73015be18537836e83bf104a1b0028184210ba4e"
+version = "0.1.22"
+source = "git+https://github.com/qlurkin/wgpu-bootstrap?tag=v0.1.22#75d19773d3ce276a1ac4cd850c691251e05d3524"
 dependencies = [
  "anyhow",
  "bytemuck",

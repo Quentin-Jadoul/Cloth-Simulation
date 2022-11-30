@@ -8,10 +8,8 @@ use wgpu_bootstrap::{
     camera::Camera,
     default::{ Vertex, Particle },
     wgpu,
-    geometry::icosahedron,
+    geometry::icosphere,
 };
-
-//test
 
 const NUM_PARTICLES_PER_ROW: u32 = 3;
 const PARTICLE_DISPLACEMENT: cgmath::Vector3<f32> = cgmath::Vector3::new(NUM_PARTICLES_PER_ROW as f32 * 0.5, 0.0, NUM_PARTICLES_PER_ROW as f32 * 0.5);
@@ -22,7 +20,7 @@ struct MyApp {
     pipeline: wgpu::RenderPipeline,
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
-    particles: Vec<Particles>,
+    particles: Vec<Particle>,
     particle_buffer: wgpu::Buffer,
     nb_indices: usize,
 }
@@ -56,7 +54,7 @@ impl MyApp {
             wgpu::PrimitiveTopology::TriangleList
         );
     
-        let (vertices, indices) = icosahedron();
+        let (vertices, indices) = icosphere(1);
 
         let nb_indices = indices.len();
     
@@ -70,12 +68,12 @@ impl MyApp {
             let velocity = cgmath::Vector3 { x: 0.0, y: 0.0, z: 0.0 };
 
             Particle {
-                position, velocity,
+                position: position.into(), velocity: velocity.into(),
             }
         }).collect::<Vec<_>>();
 
-        let particle_data = particles.iter().map(Particle).collect::<Vec<_>>();
-        let particle_buffer = context.create_buffer(particle_data.as_slice(), wgpu::BufferUsages::VERTEX);
+        //let particle_data = particles.iter().map(Particle).collect::<Vec<_>>();
+        let particle_buffer = context.create_buffer(particles.as_slice(), wgpu::BufferUsages::VERTEX);
         
         Self {
             diffuse_bind_group,
