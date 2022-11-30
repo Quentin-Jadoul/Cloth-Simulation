@@ -14,12 +14,43 @@ use wgpu_bootstrap::{
 const NUM_PARTICLES_PER_ROW: u32 = 3;
 const PARTICLE_DISPLACEMENT: cgmath::Vector3<f32> = cgmath::Vector3::new(NUM_PARTICLES_PER_ROW as f32 * 0.5, 0.0, NUM_PARTICLES_PER_ROW as f32 * 0.5);
 
+const CUBE_SIZE: f32 = 5.0;
+//create a cube vertices and indices
+const VERTICES: &[Vertex] = &[
+    Vertex { position: [-CUBE_SIZE, -CUBE_SIZE, -CUBE_SIZE], normal: [0.0, 0.0, 0.0], tangent: [0.0, 0.0, 0.0], tex_coords: [0.0, 0.0], },
+    Vertex { position: [-CUBE_SIZE, CUBE_SIZE, -CUBE_SIZE], normal: [0.0, 0.0, 0.0], tangent: [0.0, 0.0, 0.0], tex_coords: [0.0, 0.0], },
+    Vertex { position: [CUBE_SIZE, CUBE_SIZE, -CUBE_SIZE], normal: [0.0, 0.0, 0.0], tangent: [0.0, 0.0, 0.0], tex_coords: [0.0, 0.0], },
+    Vertex { position: [CUBE_SIZE, -CUBE_SIZE, -CUBE_SIZE], normal: [0.0, 0.0, 0.0], tangent: [0.0, 0.0, 0.0], tex_coords: [0.0, 0.0], },
+    Vertex { position: [-CUBE_SIZE, -CUBE_SIZE, CUBE_SIZE], normal: [0.0, 0.0, 0.0], tangent: [0.0, 0.0, 0.0], tex_coords: [0.0, 0.0], },
+    Vertex { position: [-CUBE_SIZE, CUBE_SIZE, CUBE_SIZE], normal: [0.0, 0.0, 0.0], tangent: [0.0, 0.0, 0.0], tex_coords: [0.0, 0.0], },
+    Vertex { position: [CUBE_SIZE, CUBE_SIZE, CUBE_SIZE], normal: [0.0, 0.0, 0.0], tangent: [0.0, 0.0, 0.0], tex_coords: [0.0, 0.0], },
+    Vertex { position: [CUBE_SIZE, -CUBE_SIZE, CUBE_SIZE], normal: [0.0, 0.0, 0.0], tangent: [0.0, 0.0, 0.0], tex_coords: [0.0, 0.0], },
+    
+];
+
+const INDICES: &[u16] = &[
+    0,1,
+    1,2,
+    2,3,
+    3,0,
+    0,4,
+    1,5,
+    2,6,
+    3,7,
+    4,5,
+    5,6,
+    6,7,
+    7,4,
+];
 struct MyApp {
-    diffuse_bind_group: wgpu::BindGroup,
+    
     camera_bind_group: wgpu::BindGroup,
     pipeline: wgpu::RenderPipeline,
+    line_pipeline: wgpu::RenderPipeline,
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
+    cube_vertex_buffer: wgpu::Buffer,
+    cube_index_buffer: wgpu::Buffer,
     particles: Vec<Particle>,
     particle_buffer: wgpu::Buffer,
     nb_indices: usize,
@@ -27,9 +58,6 @@ struct MyApp {
 
 impl MyApp {
     fn new(context: &Context) -> Self {
-        let texture = context.create_srgb_texture("happy-tree.png", include_bytes!("happy-tree.png"));
-    
-        let diffuse_bind_group = create_texture_bind_group(context, &texture);
     
         let camera = Camera {
             eye: (0.0, 10.0, 15.0).into(),
@@ -45,13 +73,22 @@ impl MyApp {
     
         let pipeline = context.create_render_pipeline(
             "Render Pipeline",
-            include_str!("shader_instances.wgsl"),
+            include_str!("red.wgsl"),
             &[Vertex::desc(), Particle::desc()],
             &[
-                &context.texture_bind_group_layout,
                 &context.camera_bind_group_layout,
             ],
             wgpu::PrimitiveTopology::TriangleList
+        );
+
+        let line_pipeline = context.create_render_pipeline(
+            "Render Pipeline",
+            include_str!("blue.wgsl"),
+            &[Vertex::desc()],
+            &[
+                &context.camera_bind_group_layout,
+            ],
+            wgpu::PrimitiveTopology::LineList
         );
     
         let (vertices, indices) = icosphere(1);
@@ -60,6 +97,9 @@ impl MyApp {
     
         let vertex_buffer = context.create_buffer(vertices.as_slice(), wgpu::BufferUsages::VERTEX);
         let index_buffer = context.create_buffer(indices.as_slice(), wgpu::BufferUsages::INDEX);
+
+        let cube_vertex_buffer = context.create_buffer(VERTICES, wgpu::BufferUsages::VERTEX);
+        let cube_index_buffer = context.create_buffer(INDICES, wgpu::BufferUsages::INDEX);
 
         let particles = (0..NUM_PARTICLES_PER_ROW*NUM_PARTICLES_PER_ROW).map(|index| {
             let x = index % NUM_PARTICLES_PER_ROW;
@@ -76,11 +116,13 @@ impl MyApp {
         let particle_buffer = context.create_buffer(particles.as_slice(), wgpu::BufferUsages::VERTEX);
         
         Self {
-            diffuse_bind_group,
             camera_bind_group,
             pipeline,
+            line_pipeline,
             vertex_buffer,
             index_buffer,
+            cube_vertex_buffer,
+            cube_index_buffer,
             particles,
             particle_buffer,
             nb_indices
@@ -95,13 +137,22 @@ impl Application for MyApp {
         {
             let mut render_pass = frame.begin_render_pass(wgpu::Color {r: 0.1, g: 0.2, b: 0.3, a: 1.0});
 
+            //particle render
             render_pass.set_pipeline(&self.pipeline);
-            render_pass.set_bind_group(0, &self.diffuse_bind_group, &[]);
-            render_pass.set_bind_group(1, &self.camera_bind_group, &[]);
+            
+            render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             render_pass.set_vertex_buffer(1, self.particle_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
             render_pass.draw_indexed(0..(self.nb_indices as u32), 0, 0..self.particles.len() as _);
+
+            //cube render
+            render_pass.set_pipeline(&self.line_pipeline);
+
+            render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
+            render_pass.set_vertex_buffer(0, self.cube_vertex_buffer.slice(..));
+            render_pass.set_index_buffer(self.cube_index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+            render_pass.draw_indexed(0..(INDICES.len() as u32), 0, 0..1);
         }
 
         frame.present();
