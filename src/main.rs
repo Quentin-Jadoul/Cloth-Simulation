@@ -192,9 +192,9 @@ impl Application for MyApp {
                     particle.velocity[1] -= 0.8 * (2.0 * d * normal.y);
                     particle.velocity[2] -= 0.8 * (2.0 * d * normal.z);
                     // reset the position to be on the face
-                    particle.position[0] -= distance * normal.x;
-                    particle.position[1] -= distance * normal.y;
-                    particle.position[2] -= distance * normal.z;
+                    particle.position[0] -= 2.0 * distance * normal.x;
+                    particle.position[1] -= 2.0 * distance * normal.y;
+                    particle.position[2] -= 2.0 * distance * normal.z;
                 }
             }
             // if the speed is too low, stop the particle
