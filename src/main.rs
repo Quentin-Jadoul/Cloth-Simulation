@@ -71,7 +71,7 @@ impl MyApp {
     fn new(context: &Context) -> Self {
     
         let camera = Camera {
-            eye: (0.0, 10.0, 15.0).into(),
+            eye: (0.0, 15.0, 20.0).into(),
             target: (0.0, 0.0, 0.0).into(),
             up: cgmath::Vector3::unit_y(),
             aspect: context.get_aspect_ratio(),
@@ -188,13 +188,24 @@ impl Application for MyApp {
                 let distance = cgmath::dot(normal, cgmath::Vector3::new(particle.position[0], particle.position[1], particle.position[2])) + face[3];
                 if distance < 0.0 {
                     let d = cgmath::dot(normal, cgmath::Vector3::new(particle.velocity[0], particle.velocity[1], particle.velocity[2]));
-                    // particle.velocity[0] -= d * normal.x;
-                    // particle.velocity[1] -= d * normal.y;
-                    // particle.velocity[2] -= d * normal.z;
-                    particle.velocity[0] = -0.8*particle.velocity[0];
-                    particle.velocity[1] = -0.8*particle.velocity[1];
-                    particle.velocity[2] = -0.8*particle.velocity[2];
+                    particle.velocity[0] -= 0.8 * (2.0 * d * normal.x);
+                    particle.velocity[1] -= 0.8 * (2.0 * d * normal.y);
+                    particle.velocity[2] -= 0.8 * (2.0 * d * normal.z);
+                    // reset the position to be on the face
+                    particle.position[0] -= distance * normal.x;
+                    particle.position[1] -= distance * normal.y;
+                    particle.position[2] -= distance * normal.z;
                 }
+            }
+            // if the speed is too low, stop the particle
+            if particle.velocity[0].abs() < 0.1 {
+                particle.velocity[0] = 0.0;
+            }
+            if particle.velocity[1].abs() < 0.1 {
+                particle.velocity[1] = 0.0;
+            }
+            if particle.velocity[2].abs() < 0.1 {
+                particle.velocity[2] = 0.0;
             }
         }
 
