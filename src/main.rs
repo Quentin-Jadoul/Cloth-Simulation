@@ -8,10 +8,18 @@ use wgpu_bootstrap::{
     default::{ Vertex, Particle },
     wgpu,
     geometry::icosphere,
+    computation::Computation,
 };
 
 const NUM_PARTICLES_PER_ROW: u32 = 3;
 const PARTICLE_DISPLACEMENT: cgmath::Vector3<f32> = cgmath::Vector3::new(NUM_PARTICLES_PER_ROW as f32 * 0.5, 0.0, NUM_PARTICLES_PER_ROW as f32 * 0.5);
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+struct ComputeData {
+    delta_time: f32,
+    nb_instances: u32,
+}
 
 const CUBE_SIZE: f32 = 5.0;
 //create a cube vertices and indices
@@ -54,17 +62,21 @@ const FACES: &[cgmath::Vector4<f32>] = &[
     cgmath::Vector4::new(1.0, 0.0, 0.0, CUBE_SIZE), //right
 ];
 struct MyApp {
-    
     camera_bind_group: wgpu::BindGroup,
     pipeline: wgpu::RenderPipeline,
+    compute_pipeline: wgpu::ComputePipeline,
     line_pipeline: wgpu::RenderPipeline,
     vertex_buffer: wgpu::Buffer,
     index_buffer: wgpu::Buffer,
+    compute_particles_bind_group: wgpu::BindGroup,
+    compute_data_buffer: wgpu::Buffer,
+    compute_data_bind_group: wgpu::BindGroup,
     cube_vertex_buffer: wgpu::Buffer,
     cube_index_buffer: wgpu::Buffer,
     particles: Vec<Particle>,
     particle_buffer: wgpu::Buffer,
     nb_indices: usize,
+
 }
 
 impl MyApp {
@@ -117,15 +129,49 @@ impl MyApp {
             let z = index / NUM_PARTICLES_PER_ROW;
             let position = cgmath::Vector3 { x: (x as f32) * 3 as f32, y: 0.0, z: (z as f32) * 3 as f32 } - PARTICLE_DISPLACEMENT * 3 as f32;
             
-            let velocity = cgmath::Vector3 { x: 3.0, y: 3.0, z: 3.0 };
+            let velocity = cgmath::Vector3 { x: 0.0, y: 0.0, z: 0.0 };
 
             Particle {
                 position: position.into(), velocity: velocity.into(),
             }
         }).collect::<Vec<_>>();
 
+        //let particle_data = particles.iter().map(particles).collect::<Vec<_>>();
+        //let particle_buffer = context.create_buffer(particles.as_slice(), wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::STORAGE);
+
         //let particle_data = particles.iter().map(Particle).collect::<Vec<_>>();
-        let particle_buffer = context.create_buffer(particles.as_slice(), wgpu::BufferUsages::VERTEX);
+        let particle_buffer = context.create_buffer(particles.as_slice(), wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::STORAGE);
+
+        let compute_pipeline = context.create_compute_pipeline("Compute Pipeline!", include_str!("compute.wgsl"));
+
+        let compute_particles_bind_group = context.create_bind_group(
+            "Compute Particles Bind Group",
+            &compute_pipeline.get_bind_group_layout(0),
+            &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: particle_buffer.as_entire_binding()
+                }
+            ]
+        );
+
+        let compute_data = ComputeData {
+            delta_time: 0.016,
+            nb_instances: 100,
+
+        };
+
+        let compute_data_buffer = context.create_buffer(&[compute_data], wgpu::BufferUsages::UNIFORM);
+        let compute_data_bind_group = context.create_bind_group(
+            "Compute Data!", 
+            &compute_pipeline.get_bind_group_layout(1), 
+            &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: compute_data_buffer.as_entire_binding(),
+                }
+            ]
+        );
         
         Self {
             camera_bind_group,
@@ -137,7 +183,11 @@ impl MyApp {
             cube_index_buffer,
             particles,
             particle_buffer,
-            nb_indices
+            nb_indices,
+            compute_particles_bind_group,
+            compute_data_buffer,
+            compute_pipeline,
+            compute_data_bind_group,
         }
     }
 }
@@ -174,45 +224,65 @@ impl Application for MyApp {
 
     fn update(&mut self, context: &Context, delta_time: f32) {
         for particle in self.particles.iter_mut() {
-            //update the position of the particle
-            particle.position[0] += particle.velocity[0] * delta_time;
-            particle.position[1] += particle.velocity[1] * delta_time;
-            particle.position[2] += particle.velocity[2] * delta_time;
 
-            //add gravity to the particle
-            particle.velocity[1] -= 9.81 * delta_time;
+            let mut compute_data = ComputeData {
+                delta_time,
+                nb_instances: 100,
+            };
+            context.update_buffer(&self.compute_data_buffer, &[compute_data]);
 
-            //check if the particle hits the FACES of the cube
-            for face in FACES.iter() {
-                let normal = cgmath::Vector3::new(face[0], face[1], face[2]);
-                let distance = cgmath::dot(normal, cgmath::Vector3::new(particle.position[0], particle.position[1], particle.position[2])) + face[3];
-                if distance < 0.0 {
-                    let d = cgmath::dot(normal, cgmath::Vector3::new(particle.velocity[0], particle.velocity[1], particle.velocity[2]));
-                    particle.velocity[0] -= 0.8 * (2.0 * d * normal.x);
-                    particle.velocity[1] -= 0.8 * (2.0 * d * normal.y);
-                    particle.velocity[2] -= 0.8 * (2.0 * d * normal.z);
-                    // reset the position to be on the face
-                    particle.position[0] -= 2.0 * distance * normal.x;
-                    particle.position[1] -= 2.0 * distance * normal.y;
-                    particle.position[2] -= 2.0 * distance * normal.z;
-                }
+            let mut computation = Computation::new(context);
+
+            {
+                let mut compute_pass = computation.begin_compute_pass();
+    
+                compute_pass.set_pipeline(&self.compute_pipeline);
+                compute_pass.set_bind_group(0, &self.compute_particles_bind_group, &[]);
+                compute_pass.set_bind_group(1, &self.compute_data_bind_group, &[]);
+                compute_pass.dispatch_workgroups(2, 1, 1);
             }
-            // if the speed is too low, stop the particle
-            if particle.velocity[0].abs() < 0.1 {
-                particle.velocity[0] = 0.0;
-            }
-            if particle.velocity[1].abs() < 0.1 {
-                particle.velocity[1] = 0.0;
-            }
-            if particle.velocity[2].abs() < 0.1 {
-                particle.velocity[2] = 0.0;
-            }
+    
+            computation.submit();
+
+            // //update the position of the particle
+            // particle.position[0] += particle.velocity[0] * delta_time;
+            // particle.position[1] += particle.velocity[1] * delta_time;
+            // particle.position[2] += particle.velocity[2] * delta_time;
+
+            // //add gravity to the particle
+            // particle.velocity[1] -= 9.81 * delta_time;
+
+            // //check if the particle hits the FACES of the cube
+            // for face in FACES.iter() {
+            //     let normal = cgmath::Vector3::new(face[0], face[1], face[2]);
+            //     let distance = cgmath::dot(normal, cgmath::Vector3::new(particle.position[0], particle.position[1], particle.position[2])) + face[3];
+            //     if distance < 0.0 {
+            //         let d = cgmath::dot(normal, cgmath::Vector3::new(particle.velocity[0], particle.velocity[1], particle.velocity[2]));
+            //         particle.velocity[0] -= 0.8 * (2.0 * d * normal.x);
+            //         particle.velocity[1] -= 0.8 * (2.0 * d * normal.y);
+            //         particle.velocity[2] -= 0.8 * (2.0 * d * normal.z);
+            //         // reset the position to be on the face
+            //         particle.position[0] -= 2.0 * distance * normal.x;
+            //         particle.position[1] -= 2.0 * distance * normal.y;
+            //         particle.position[2] -= 2.0 * distance * normal.z;
+            //     }
+            // }
+            // // if the speed is too low, stop the particle
+            // if particle.velocity[0].abs() < 0.1 {
+            //     particle.velocity[0] = 0.0;
+            // }
+            // if particle.velocity[1].abs() < 0.1 {
+            //     particle.velocity[1] = 0.0;
+            // }
+            // if particle.velocity[2].abs() < 0.1 {
+            //     particle.velocity[2] = 0.0;
+            // }
         }
 
 
 
-        let particle_data = self.particles.clone();
-        context.update_buffer(&self.particle_buffer, particle_data.as_slice());
+        // let particle_data = self.particles.clone();
+        // context.update_buffer(&self.particle_buffer, particle_data.as_slice());
     }
 }
 
